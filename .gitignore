@@ -142,11 +142,11 @@ Thumbs.db
 /.pytest_cache
 /.coverage
 
-# Data files
-*.jsonl
-*.json
-
-# Output files
+# Output files (excluding data directory)
 *.md
 chapters_output*.jsonl
 outline_*.jsonl
+
+# Ignore json/jsonl files except in data directory
+!data/**/*.json
+!data/**/*.jsonl
