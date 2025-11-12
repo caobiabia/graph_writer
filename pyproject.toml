@@ -1,0 +1,17 @@
+[project]
+name = "graph_writer"
+description = "基于图结构的自动化文本生成方法"
+version = "0.1.0"
+authors = [
+  { name = "csp", email = "user@example.com" }
+]
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "aiohttp>=3.9.0",
+    "numpy>=1.24.0",
+    "pyyaml>=6.0",
+    "networkx>=3.0",
+    "requests>=2.32.5",
+    "openai>=2.7.1",
+]
