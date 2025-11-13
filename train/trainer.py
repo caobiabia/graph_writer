@@ -30,7 +30,7 @@ class TrainerNoShuffle(Trainer):
         data_collator: Optional["DataCollator"] = None,
         train_dataset: Optional[Dataset] = None,
         eval_dataset: Optional[Dataset] = None,
-        tokenizer: Optional["PreTrainedTokenizerBase"] = None,
+        processing_class: Optional["PreTrainedTokenizerBase"] = None,
         model_init: Callable[[], "PreTrainedModel"] = None,
         compute_metrics: Optional[Callable[["EvalPrediction"], Dict]] = None,
         callbacks: Optional[List["TrainerCallback"]] = None,
@@ -42,12 +42,12 @@ class TrainerNoShuffle(Trainer):
             data_collator=data_collator,
             train_dataset=train_dataset,
             eval_dataset=eval_dataset,
-            tokenizer=tokenizer,
+            processing_class=processing_class,
             model_init=model_init,
             compute_metrics=compute_metrics,
             callbacks=callbacks,
             optimizers=optimizers,
         )
 
-    def _get_train_sampler(self) -> Optional[torch.utils.data.Sampler]: # disable shuffling
-        return SequentialSampler(self.train_dataset)
+    def _get_train_sampler(self, dataset) -> Optional[torch.utils.data.Sampler]:
+        return SequentialSampler(dataset)

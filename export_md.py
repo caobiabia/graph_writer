@@ -1,7 +1,7 @@
 import json
 
 # Define the input and output paths
-path = r"data\original_content\output_20251112_130812.jsonl"
+path = r"E:\Graph_writer\data\refined_content\refined_20251108_201946.jsonl"
 output_path = r"full3.md" # Name of the output file
 
 data = []

@@ -105,7 +105,7 @@ def train():
     if "chatglm" in model_args.model_name_or_path.lower() or "longalign-6b" in model_args.model_name_or_path.lower():
         model = AutoModelForCausalLM.from_pretrained(
             model_args.model_name_or_path,
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             trust_remote_code=True, empty_init=False
         )
         tokenizer = AutoTokenizer.from_pretrained(
@@ -143,12 +143,12 @@ def train():
 
     trainer = TrainerNoShuffle(
         model=model, 
-        tokenizer=tokenizer, 
+        processing_class=tokenizer, 
         args=training_args, 
         **data_module
     )
 
-    trainer.train(resume_from_checkpoint=False)
+    trainer.train(resume_from_checkpoint=True)
     trainer.save_model()
 
 if __name__ == "__main__":

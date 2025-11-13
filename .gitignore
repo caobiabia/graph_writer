@@ -146,7 +146,10 @@ Thumbs.db
 *.md
 chapters_output*.jsonl
 outline_*.jsonl
-
+/models/
+/data/qwen
+/multiprocess_data_qwen/
 # Ignore json/jsonl files except in data directory
 !data/**/*.json
 !data/**/*.jsonl
+models_link

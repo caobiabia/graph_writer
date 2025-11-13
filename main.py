@@ -550,129 +550,95 @@ async def auto_process_tasks(input_jsonl_file):
         word_count = task.get("length", 5000)  # 默认5000字
         style = task.get("type", "学术手册")  # 默认学术手册风格
         
-        # 生成时间戳，用于当前任务的文件名
         task_timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        
-        # 保存原始全局变量
         global JSONL_FILE, GENERATED_JSONL, REFINED_JSONL
         original_jsonl_file = JSONL_FILE
         original_generated_jsonl = GENERATED_JSONL
         original_refined_jsonl = REFINED_JSONL
-        
-        # 更新全局变量为当前任务的时间戳
-        JSONL_FILE = f"data/task/task_planning_{task_timestamp}.jsonl"
-        GENERATED_JSONL = f"data/original_content/output_{task_timestamp}.jsonl"
-        REFINED_JSONL = f"data/refined_content/refined_{task_timestamp}.jsonl"
-        
+
         print(f"任务描述: {query}")
         print(f"字数限制: {word_count}")
         print(f"写作风格: {style}")
-        
-        try:
-            # 1. 生成大纲和任务编排
-            print("\n步骤1: 生成大纲和任务编排...")
-            outline, task_planning = gen_task_planning_main(query, word_count, style)
-            
-            # 2. 读取任务编排并生成正文
-            print("\n步骤2: 生成正文...")
-            records = load_chapters(JSONL_FILE)
-            
-            # Embedding + 相似度候选对
-            similarities = compute_similarities(records, SIM_THRESHOLD)
-            print(f"发现 {len(similarities)} 个相似度候选对（> {SIM_THRESHOLD}）")
-            
-            # 使用 GPT 判断方向，构建原始有向图 G（带环）
-            G, judge_results = await async_build_graph(records, similarities, MAX_CONCURRENT_GPT_CALLS)
-            print(f"原始有向图 G 节点数: {G.number_of_nodes()}, 边数: {G.number_of_edges()}")
-            
-            # 去环（make_dag）
-            DAG = make_dag(G)
-            print(f"去环后 DAG 节点数: {DAG.number_of_nodes()}, 边数: {DAG.number_of_edges()}")
-            
-            # DAG 拆层
-            levels = dag_to_levels(DAG)
-            
-            # 异步并发生成正文（按层）
-            generated_chapters = {}
-            open(GENERATED_JSONL, "w", encoding="utf-8").close()
-            
-            async with aiohttp.ClientSession() as session:
-                semaphore = asyncio.Semaphore(MAX_CONCURRENT_GPT_CALLS)
-                previous_layer_contents = ""
-                
-                for layer_idx, level in enumerate(levels):
-                    print(f"\n生成第 {layer_idx+1} 层，共 {len(level)} 个章节并发处理")
-                    tasks_list = [
-                        async_generate_chapter(session, semaphore, records[node_id], previous_layer_contents)
-                        for node_id in level
-                    ]
-                    layer_results = await asyncio.gather(*tasks_list)
-                    
-                    # 拼接当前层内容，作为下一层的上下文
-                    previous_layer_contents = ""
-                    for node_id, content in zip(level, layer_results):
-                        append_chapter_jsonl(node_id, records[node_id]["title"], content, jsonl_file=GENERATED_JSONL)
-                        previous_layer_contents += f"\n\n【{records[node_id]['title']}】\n{content}\n"
-                        generated_chapters[node_id] = {"title": records[node_id]["title"], "content": content}
-            
-            print(f"\n正文生成完成，共生成 {len(generated_chapters)} 个章节，已保存到 {GENERATED_JSONL}")
-            
-            # 3. 回环强化（R2）
-            # 从 judge_results 中筛选 direction == 'both' 的 pair（去重）
-            both_pairs = set()
-            for i, j, sim, direction, reason in judge_results:
-                if direction == "both":
-                    pair = (min(i, j), max(i, j))
-                    both_pairs.add(pair)
-            both_pairs = sorted(list(both_pairs))
-            print(f"检测到 {len(both_pairs)} 个 direction='both' 的 pair，进入 pairwise refine 阶段")
-            
-            # 并发执行 refine
-            if both_pairs:
+
+        for run_idx in range(1, 6):
+            JSONL_FILE = f"data/task/task_planning_{task_timestamp}_{run_idx}.jsonl"
+            GENERATED_JSONL = f"data/original_content/output_{task_timestamp}_{run_idx}.jsonl"
+            REFINED_JSONL = f"data/refined_content/refined_{task_timestamp}_{run_idx}.jsonl"
+            print(f"\n第 {run_idx} 次生成")
+            try:
+                print("\n步骤1: 生成大纲和任务编排...")
+                outline, task_planning = gen_task_planning_main(query, word_count, style)
+                print("\n步骤2: 生成正文...")
+                records = load_chapters(JSONL_FILE)
+                similarities = compute_similarities(records, SIM_THRESHOLD)
+                print(f"发现 {len(similarities)} 个相似度候选对（> {SIM_THRESHOLD}）")
+                G, judge_results = await async_build_graph(records, similarities, MAX_CONCURRENT_GPT_CALLS)
+                print(f"原始有向图 G 节点数: {G.number_of_nodes()}, 边数: {G.number_of_edges()}")
+                DAG = make_dag(G)
+                print(f"去环后 DAG 节点数: {DAG.number_of_nodes()}, 边数: {DAG.number_of_edges()}")
+                levels = dag_to_levels(DAG)
+                generated_chapters = {}
+                open(GENERATED_JSONL, "w", encoding="utf-8").close()
                 async with aiohttp.ClientSession() as session:
-                    sem = asyncio.Semaphore(MAX_CONCURRENT_GPT_CALLS)
-                    refine_tasks = []
-                    for u, v in both_pairs:
-                        text_u = generated_chapters.get(u, {}).get("content", "")
-                        text_v = generated_chapters.get(v, {}).get("content", "")
-                        if not text_u and not text_v:
-                            continue
-                        refine_tasks.append(async_refine_pair(session, sem, u, v, text_u, text_v))
-                    refine_results = await asyncio.gather(*refine_tasks)
-                
-                # 应用 refine 结果
-                for i, j, res in refine_results:
-                    A_new = res.get("A_new")
-                    B_new = res.get("B_new")
-                    if A_new and isinstance(A_new, str) and A_new.strip():
-                        generated_chapters[i]["content"] = A_new
-                    if B_new and isinstance(B_new, str) and B_new.strip():
-                        generated_chapters[j]["content"] = B_new
-                
-                # 保存 refine 后的全部章节
-                save_all_chapters(generated_chapters, jsonl_file=REFINED_JSONL)
-                print(f"回环强化完成，已把 refine 后的章节保存到 {REFINED_JSONL}")
-            else:
-                print("没有 direction='both' 的 pair，跳过 refine 阶段。")
-                # 仍然保存一份 identical 的 refined 文件
-                save_all_chapters(generated_chapters, jsonl_file=REFINED_JSONL)
-                print(f"已把当前章节备份为 {REFINED_JSONL}")
-            
-            print(f"\n任务 {i+1} 处理完成!")
-            print(f"任务编排: {JSONL_FILE}")
-            print(f"原始正文: {GENERATED_JSONL}")
-            print(f"优化正文: {REFINED_JSONL}")
-            
-        except Exception as e:
-            print(f"处理任务 {i+1} 时出错: {e}")
-            import traceback
-            traceback.print_exc()
-            continue
-        finally:
-            # 恢复原始全局变量
-            JSONL_FILE = original_jsonl_file
-            GENERATED_JSONL = original_generated_jsonl
-            REFINED_JSONL = original_refined_jsonl
+                    semaphore = asyncio.Semaphore(MAX_CONCURRENT_GPT_CALLS)
+                    previous_layer_contents = ""
+                    for layer_idx, level in enumerate(levels):
+                        print(f"\n生成第 {layer_idx+1} 层，共 {len(level)} 个章节并发处理")
+                        tasks_list = [
+                            async_generate_chapter(session, semaphore, records[node_id], previous_layer_contents)
+                            for node_id in level
+                        ]
+                        layer_results = await asyncio.gather(*tasks_list)
+                        previous_layer_contents = ""
+                        for node_id, content in zip(level, layer_results):
+                            append_chapter_jsonl(node_id, records[node_id]["title"], content, jsonl_file=GENERATED_JSONL)
+                            previous_layer_contents += f"\n\n【{records[node_id]['title']}】\n{content}\n"
+                            generated_chapters[node_id] = {"title": records[node_id]["title"], "content": content}
+                print(f"\n正文生成完成，共生成 {len(generated_chapters)} 个章节，已保存到 {GENERATED_JSONL}")
+                both_pairs = set()
+                for u_i, u_j, u_sim, u_dir, u_reason in judge_results:
+                    if u_dir == "both":
+                        pair = (min(u_i, u_j), max(u_i, u_j))
+                        both_pairs.add(pair)
+                both_pairs = sorted(list(both_pairs))
+                print(f"检测到 {len(both_pairs)} 个 direction='both' 的 pair，进入 pairwise refine 阶段")
+                if both_pairs:
+                    async with aiohttp.ClientSession() as session:
+                        sem = asyncio.Semaphore(MAX_CONCURRENT_GPT_CALLS)
+                        refine_tasks = []
+                        for u, v in both_pairs:
+                            text_u = generated_chapters.get(u, {}).get("content", "")
+                            text_v = generated_chapters.get(v, {}).get("content", "")
+                            if not text_u and not text_v:
+                                continue
+                            refine_tasks.append(async_refine_pair(session, sem, u, v, text_u, text_v))
+                        refine_results = await asyncio.gather(*refine_tasks)
+                    for r_i, r_j, res in refine_results:
+                        A_new = res.get("A_new")
+                        B_new = res.get("B_new")
+                        if A_new and isinstance(A_new, str) and A_new.strip():
+                            generated_chapters[r_i]["content"] = A_new
+                        if B_new and isinstance(B_new, str) and B_new.strip():
+                            generated_chapters[r_j]["content"] = B_new
+                    save_all_chapters(generated_chapters, jsonl_file=REFINED_JSONL)
+                    print(f"回环强化完成，已把 refine 后的章节保存到 {REFINED_JSONL}")
+                else:
+                    print("没有 direction='both' 的 pair，跳过 refine 阶段。")
+                    save_all_chapters(generated_chapters, jsonl_file=REFINED_JSONL)
+                    print(f"已把当前章节备份为 {REFINED_JSONL}")
+                print(f"\n任务 {i+1} 第 {run_idx} 次生成完成")
+                print(f"任务编排: {JSONL_FILE}")
+                print(f"原始正文: {GENERATED_JSONL}")
+                print(f"优化正文: {REFINED_JSONL}")
+            except Exception as e:
+                print(f"处理任务 {i+1} 第 {run_idx} 次时出错: {e}")
+                import traceback
+                traceback.print_exc()
+                continue
+            finally:
+                JSONL_FILE = original_jsonl_file
+                GENERATED_JSONL = original_generated_jsonl
+                REFINED_JSONL = original_refined_jsonl
 
 # ===================== 主流程 =====================
 async def async_main(file_path):
