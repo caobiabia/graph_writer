@@ -1,5 +1,13 @@
 import os, json, glob, re, argparse, random
 
+def count_words(text):
+    chinese_characters = re.findall(r'[\u4e00-\u9fff]', text)
+    english_words = re.findall(r'\b[a-zA-Z]+\b', text)
+    chinese_char_count = len(chinese_characters)
+    english_word_count = len(english_words)
+    total_count = chinese_char_count + english_word_count
+    return total_count
+
 def read_jsonl(path):
     with open(path, encoding='utf-8') as f:
         for line in f:
@@ -23,15 +31,34 @@ def build_user_prompt(task_lines):
 def main(data_root: str, out_path: str):
     refined_dir = os.path.join(data_root, "refined_content")
     task_dir = os.path.join(data_root, "task")
-    ts_pattern = re.compile(r"_(\d{8}_\d{6})\.jsonl$")
+    ts_pattern = re.compile(r"_(\d{8}_\d{6})(?:_(\d+))?\.jsonl$")
 
     merged_records = []
+    meets_5pct = 0
+    meets_10pct = 0
+    meets_15pct = 0
+    required_cases = 0
+    over_count = 0
+    under_count = 0
+    over_5pct = 0
+    under_5pct = 0
+    over_10pct = 0
+    under_10pct = 0
+    over_15pct = 0
+    under_15pct = 0
+    required_cases = 0
+    over_count = 0
+    under_count = 0
+    over_5pct = 0
+    under_5pct = 0
     for refined_fp in glob.glob(os.path.join(refined_dir, "*.jsonl")):
         m = ts_pattern.search(refined_fp)
         if not m:
             continue
         ts = m.group(1)
-        task_fp = os.path.join(task_dir, f"task_planning_{ts}.jsonl")
+        suffix = m.group(2)
+        task_ts = ts if not suffix else f"{ts}_{suffix}"
+        task_fp = os.path.join(task_dir, f"task_planning_{task_ts}.jsonl")
         if not os.path.exists(task_fp):
             print(f"[WARN] task file missing for {ts}")
             continue
@@ -46,6 +73,34 @@ def main(data_root: str, out_path: str):
 
         long_response = "\n".join([r.get("content", "") for r in refined_lines])
         prompt = build_user_prompt(task_lines)
+        head = task_lines[0] if task_lines else {}
+        required = head.get("word_count")
+        resp_len = count_words(long_response)
+        if isinstance(required, int) and required > 0:
+            required_cases += 1
+            ratio = abs(resp_len - required) / required
+            if ratio <= 0.05:
+                meets_5pct += 1
+            if ratio <= 0.10:
+                meets_10pct += 1
+            if ratio <= 0.15:
+                meets_15pct += 1
+            if resp_len > required:
+                over_count += 1
+                if resp_len > int(required * 1.05):
+                    over_5pct += 1
+                if resp_len > int(required * 1.10):
+                    over_10pct += 1
+                if resp_len > int(required * 1.15):
+                    over_15pct += 1
+            elif resp_len < required:
+                under_count += 1
+                if resp_len < int(required * 0.95):
+                    under_5pct += 1
+                if resp_len < int(required * 0.90):
+                    under_10pct += 1
+                if resp_len < int(required * 0.85):
+                    under_15pct += 1
         merged_records.append({"prompt": prompt, "response": long_response})
 
     random.shuffle(merged_records)
@@ -54,6 +109,13 @@ def main(data_root: str, out_path: str):
         for obj in merged_records:
             f.write(json.dumps(obj, ensure_ascii=False) + "\n")
     print(f"Merged {len(merged_records)} pairs -> {out_path}")
+    print(f"Total merged: {len(merged_records)}")
+    print(f"Within 5% length requirement: {meets_5pct}")
+    print(f"Within 10% length requirement: {meets_10pct}")
+    print(f"Within 15% length requirement: {meets_15pct}")
+    print(f"Required cases: {required_cases}")
+    print(f"Over required: {over_count} (>5%: {over_5pct}, >10%: {over_10pct}, >15%: {over_15pct})")
+    print(f"Under required: {under_count} (>5%: {under_5pct}, >10%: {under_10pct}, >15%: {under_15pct})")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
