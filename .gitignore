@@ -151,6 +151,8 @@ outline_*.jsonl
 /data/original_content
 /data/refined_content
 /data/task
+/data_completed
+/data_high
 
 /multiprocess_data_qwen/
 # Ignore json/jsonl files except in data directory

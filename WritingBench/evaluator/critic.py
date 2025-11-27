@@ -7,7 +7,7 @@ class CriticAgent(object):
                  system_prompt: str = None):
         self.system_prompt = system_prompt
         self.model = LLM(
-            model="", # Your local path. Please download critic model from https://huggingface.co/AQuarterMile/WritingBench-Critic-Model-Qwen-7B.
+            model="/data/home/Yanchu/llm_repo/WritingBench-Critic-Model-Qwen-7B", # Your local path. Please download critic model from https://huggingface.co/AQuarterMile/WritingBench-Critic-Model-Qwen-7B.
             tensor_parallel_size=1, # Your tensor parallel size setting. Defaults to 1, indicating no parallelism
         )
 
@@ -15,7 +15,7 @@ class CriticAgent(object):
             messages: str,
             top_p: float = 0.95,
             temperature: float = 1.0,
-            max_length: int = 2048):
+            max_length: int = 30000):
 
         sampling_params = SamplingParams(
             temperature=temperature,
@@ -51,7 +51,7 @@ class CriticAgent(object):
             prompt: str,
             top_p: float = 0.95,
             temperature: float = 1.0,
-            max_length: int = 2048,
+            max_length: int = 30000,
             max_try: int = 5,
             success_check_fn: Callable = None):
         

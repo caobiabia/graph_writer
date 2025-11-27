@@ -7,9 +7,9 @@ except Exception:
     OpenAI = None
     AsyncOpenAI = None
 
-EMBED_API_URL = "http://127.0.0.1:21002/v1/embeddings"
-EMBED_MODEL = "/data/home/Yanchu/llm_repo/Qwen3-Embedding-4B"
-EMBED_TOKEN = "sk-dhtlheweglbnekhitzcnoaigaeuxxlozvihrkbkrimbchtze"
+EMBED_API_URL = "http://10.98.36.99:21003/v1/embeddings"
+EMBED_MODEL = "Qwen3-Embedding-4B/"
+EMBED_TOKEN = "EMBEDDING"
 
 GPT_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
 GPT_MODEL = "/data/home/Yanchu/llm_repo/Qwen2.5-72B-Instruct"

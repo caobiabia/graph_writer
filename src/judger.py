@@ -92,10 +92,10 @@ async def async_gpt_judge_direction(semaphore: asyncio.Semaphore, i, j, records,
                     },
                     {"role": "user", "content": prompt}
                 ],
-                max_tokens=512,
+                max_tokens=1024,
                 temperature=0.1,
                 top_p=0.5,
-                extra_body={"repetition_penalty": 1.1}
+                # extra_body={"repetition_penalty": 1.1}
             )
 
             content = r.choices[0].message.content

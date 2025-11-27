@@ -35,7 +35,7 @@ async def generate_outline(query, word_count, style):
         max_tokens=4096,
         temperature=0.5,
         top_p=0.9,
-        extra_body={"repetition_penalty": 1.15}
+        # extra_body={"repetition_penalty": 1.15}
     )
 
     return r.choices[0].message.content

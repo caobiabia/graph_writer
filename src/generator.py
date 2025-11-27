@@ -45,7 +45,7 @@ async def async_generate_chapter(semaphore, record, previous_contents):
             max_tokens=4096,
             temperature=0.6,
             top_p=0.9,
-            extra_body={"repetition_penalty": 1.2},
+            # extra_body={"repetition_penalty": 1.2},
         )
 
         content = r.choices[0].message.content

@@ -75,9 +75,8 @@ def test_lora_model(
         outputs = model.generate(
             **inputs,
             max_new_tokens=max_new_tokens,
-            # do_sample=True, # 开启采样，使生成更具多样性
-            # temperature=0.01, # 采样温度，控制随机性
-            # top_p=0.95, # Top-p 采样，控制生成词汇的范围
+            temperature=0.6, # 采样温度，控制随机性
+            top_p=0.90, # Top-p 采样，控制生成词汇的范围
             # top_k=20, # Top-k 采样，控制生成词汇的范围
             # min_p=0, # 最小概率，控制生成词汇的范围
             # repetition_penalty=1.1, # 惩罚重复词汇
@@ -105,12 +104,23 @@ def test_lora_model(
 
 if __name__ == "__main__":
     # 请根据您的实际路径进行修改
-    BASE_MODEL_PATH = "E:\\Graph_writer\\models_link\\Qwen3-0.6B"
+    BASE_MODEL_PATH = "/data/home/Yanchu/llm_repo/Qwen3-8B"
     # 假设您的LoRA适配器保存在训练输出目录的checkpoint-1子目录中
-    LORA_ADAPTER_PATH = "E:\\Graph_writer\\models\\qwen3-0.6b-lora-test\\checkpoint-100"
+    LORA_ADAPTER_PATH = "models/qwen3-8b-lora-test/checkpoint-1580"
     
     test_messages = [
-        {"role": "user", "content": f"编写一本关于机器学习入门的指南\n写作风格: 学术手册\n总字数: 5000/no_think"}
+        {"role": "system", "content": f"你是一个写作助手"},
+        {"role": "user", "content": f"写一部讲述一个少女英雄的成长并最终改变世界的20000字小说/no_think"}
     ]
+    if torch.cuda.is_available() and torch.cuda.device_count() > 4:
+        print("用4号GPU推理")
+        torch.cuda.set_device(4)
+        device = "cuda:4"
+    elif torch.cuda.is_available():
+        print("CUDA 可用但第 5 张 GPU 不存在，使用默认 GPU 0")
+        device = "cuda"
+    else:
+        print("CUDA 不可用，使用 CPU 推理")
+        device = "cpu"
 
-    test_lora_model(BASE_MODEL_PATH, LORA_ADAPTER_PATH, test_messages)
+    test_lora_model(BASE_MODEL_PATH, LORA_ADAPTER_PATH, test_messages, device=device)

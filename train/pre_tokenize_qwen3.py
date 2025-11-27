@@ -5,21 +5,7 @@ import numpy as np
 import traceback
 
 # Path or HF repo name for Qwen3-0.6B tokenizer/model
-TOKENIZER_PATH = "E:/Graph_writer/models_link/Qwen3-0.6B"  # modify if different
-
-# Initialize tokenizer (slow version preferred for chat template)
-tokenizer = AutoTokenizer.from_pretrained(TOKENIZER_PATH, trust_remote_code=True)
-
-# Ensure pad token exists for matrix padding
-if tokenizer.pad_token_id is None:
-    tokenizer.pad_token = tokenizer.eos_token
-
-# Resolve max_length; some tokenizers set it to giant value (e.g., 1e30)
 MAX_LENGTH = 32768
-
-PAD_ID = tokenizer.pad_token_id
-EOS_ID = tokenizer.eos_token_id
-
 PROC_NUM = 32  # number of worker processes (adjust based on CPU cores)
 TMP_DIR = "multiprocess_data_qwen"
 
@@ -28,10 +14,11 @@ def parse_args(args=None):
     parser = argparse.ArgumentParser(description="Pre-tokenize merged SFT data for Qwen3-0.6B")
     parser.add_argument("--input", default="data/qwen/graph_writer/merged.jsonl", help="Path to merged prompt-response jsonl file")
     parser.add_argument("--output_dir", default="data/qwen/graph_writer", help="Directory to save outputs (npy)")
+    parser.add_argument("--tokenizer_path", required=True, help="Path or HF repo name for Qwen3-0.6B tokenizer/model")
     return parser.parse_args(args)
 
 
-def build_sample(prompt: str, response: str):
+def build_sample(prompt: str, response: str, tokenizer, PAD_ID, EOS_ID, MAX_LENGTH):
     """Encode a single prompt/response pair.
 
     Prompt tokens are masked in labels (-100) so that only response contributes to the loss.
@@ -62,14 +49,14 @@ def build_sample(prompt: str, response: str):
     return full_ids, labels
 
 
-def process_segment(lines, rank):
+def process_segment(lines, rank, tokenizer, PAD_ID, EOS_ID, MAX_LENGTH, TMP_DIR):
     try:
         inputs_mat = torch.full((len(lines), MAX_LENGTH), PAD_ID, dtype=torch.long)
         labels_mat = torch.full((len(lines), MAX_LENGTH), -100, dtype=torch.long)
         valid = 0
         for line in tqdm(lines, position=rank):
             obj = json.loads(line)
-            inp_ids, lbls = build_sample(obj["prompt"], obj["response"])
+            inp_ids, lbls = build_sample(obj["prompt"], obj["response"], tokenizer, PAD_ID, EOS_ID, MAX_LENGTH)
             if inp_ids.size(0) > MAX_LENGTH:
                 continue  # skip overly long
             inputs_mat[valid, :inp_ids.size(0)] = inp_ids
@@ -86,6 +73,16 @@ def process_segment(lines, rank):
 
 def main():
     args = parse_args()
+
+    # Initialize tokenizer (slow version preferred for chat template)
+    tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_path, trust_remote_code=True)
+
+    # Ensure pad token exists for matrix padding
+    if tokenizer.pad_token_id is None:
+        tokenizer.pad_token = tokenizer.eos_token
+
+    PAD_ID = tokenizer.pad_token_id
+    EOS_ID = tokenizer.eos_token_id
 
     with open(args.input, "r", encoding="utf-8") as f:
         all_lines = f.readlines()
@@ -106,7 +103,7 @@ def main():
     pool = multiprocessing.Pool(proc_num)
     for i in range(proc_num):
         seg = all_lines[i * seg_size:(i + 1) * seg_size]
-        pool.apply_async(process_segment, args=(seg, i))
+        pool.apply_async(process_segment, args=(seg, i, tokenizer, PAD_ID, EOS_ID, MAX_LENGTH, TMP_DIR))
     pool.close()
     pool.join()
 

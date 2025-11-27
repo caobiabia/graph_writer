@@ -19,7 +19,7 @@ async def async_refine_pair(semaphore: asyncio.Semaphore, i, j, text_i, text_j):
                 max_tokens=8192,
                 temperature=0.0,
                 top_p=0.5,
-                extra_body={"repetition_penalty": 1.1}
+                # extra_body={"repetition_penalty": 1.1}
             )
             content = r.choices[0].message.content
             # ====================================================
